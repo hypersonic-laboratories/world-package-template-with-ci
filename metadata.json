@@ -1,24 +1,14 @@
 {
   "package": {
-    "id": "cbb5b42f-135b-47dc-8f40-d96aea0fcc2c",
-    "creatorId": "178e8d33-778a-491e-b3ec-424fcd5fbb1a",
-    "name": "World with WebUI",
-    "slug": "my-world-412845216",
-    "description": "World with WebUI (single page)",
+    "id": "1a20765d-4e1c-4e80-9153-f217203476c0",
+    "creatorId": "431e071b-a343-42f4-b730-17a285b3090b",
+    "name": "Actions World",
+    "slug": "actions-world",
+    "description": "this world is to test github actions",
     "type": "World",
     "contentRating": "Everyone",
-    "tags": [],
-    "isPrivate": true
+    "tags": ["Sandbox"],
+    "isPrivate": false
   },
-  "map": {
-    "name": "My Map",
-    "slug": "my-map-632523584",
-    "description": "A Map based on World with WebUI (single page) world.",
-    "contentRating": "Everyone",
-    "tags": [],
-    "isPrivate": true
-  },
-  "id": "f08f5b21-5af7-414f-a546-9a85dcb782aa",
-  "workspaceId": "4770097a-421f-e709-2a81-d4ac3c14f5a1",
   "dependencyIds": []
 }
