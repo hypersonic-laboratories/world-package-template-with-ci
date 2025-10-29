@@ -25,10 +25,10 @@ runs:
       id: create-tar
       shell: bash
       run: |
-        ARCHIVE_PATH="content"
+        ARCHIVE_PATH="content.tar.gz"
 
         echo "Creating archive with content only..."
-        tar -cz -f "$ARCHIVE_PATH" -C "." "content"
+        tar -czf "$ARCHIVE_PATH" -C "." "content"
 
         echo "archive-path=$ARCHIVE_PATH" >> $GITHUB_OUTPUT
         echo "✅ Archive created: $ARCHIVE_PATH"

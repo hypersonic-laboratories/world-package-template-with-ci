@@ -1,8 +1,7 @@
-# Package archives (ignore the tar.gz file named 'content' in root only)
-/content
-!content/
+# Package archives
 *.tar.gz
 *.tgz
+content.tar.gz
 
 # OS files
 .DS_Store
