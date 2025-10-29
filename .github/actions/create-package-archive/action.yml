@@ -21,14 +21,27 @@ runs:
         fi
         echo "✅ Content folder found"
 
+        if [ -d "scripts" ]; then
+          echo "✅ Scripts folder found"
+          echo "HAS_SCRIPTS=true" >> $GITHUB_ENV
+        else
+          echo "ℹ️  Scripts folder not found (optional)"
+          echo "HAS_SCRIPTS=false" >> $GITHUB_ENV
+        fi
+
     - name: Create archive
       id: create-tar
       shell: bash
       run: |
         ARCHIVE_PATH="content.tar.gz"
 
-        echo "Creating archive with content only..."
-        tar -czf "$ARCHIVE_PATH" -C "." "content"
+        if [ "$HAS_SCRIPTS" = "true" ]; then
+          echo "Creating archive with content and scripts..."
+          tar -czf "$ARCHIVE_PATH" -C "." "content" "scripts"
+        else
+          echo "Creating archive with content only..."
+          tar -czf "$ARCHIVE_PATH" -C "." "content"
+        fi
 
         echo "archive-path=$ARCHIVE_PATH" >> $GITHUB_OUTPUT
         echo "✅ Archive created: $ARCHIVE_PATH"
