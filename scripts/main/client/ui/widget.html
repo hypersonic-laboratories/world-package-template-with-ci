@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+.back {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.dialog {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    padding: 20px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.item {
+    width: 100%;
+    margin: 10px 0px;
+}
+
+.buttons { 
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 8px;
+}
+
+input {
+    font-size: 16px;
+}
+
+button {
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    background-color: #007bff77;
+    color: #ffffff;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #0056b377;
+}
+    </style>
+    <title>WebUI Dialog</title>
+</head>
+<body>
+    <div class="back">
+    <div class="dialog" id="dialog" style="display: none;">
+        <h2>WebUI Widget</h2>
+        <p>This widget is creted from Lua</p>
+        <p>(C - Create, 1-9 - Focus)</p>
+        <input class="item"></input>
+        <div class="buttons">
+			<button class="item" onclick="hEvent('unfocus')">Unfocus</button>
+			<button class="item" onclick="hEvent('unfocus', 5000)">for 5s</button>
+			<button class="item" onclick="hEvent('create', {}, (response) => {console.log(response);} )">Create</button>
+	        <button class="item" onclick="hEvent('close')">Close</button>
+		</div>
+    </div>
+    </div>
+
+    <script>
+		window.addEventListener('message', (event) => {            
+			if (event.data.name === 'print') {
+                console.log(event.data.args);
+            }
+            else if (event.data.name === 'resetDialog') {
+                let dialog = document.getElementById('dialog');
+                dialog.style.display = '';
+                dialog.style.backgroundColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                dialog.style.left = Math.random() * (window.innerWidth - dialog.clientWidth) + 'px';
+                dialog.style.top = Math.random() * (window.innerHeight - dialog.clientHeight) + 'px';
+            }
+        })
+    </script>
+</body>
+</html>

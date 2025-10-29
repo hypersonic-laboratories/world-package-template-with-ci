@@ -1,0 +1,1 @@
+{"shared":["shared/*.lua"],"server":["server/*.lua"],"client":["client/*.lua"]}

@@ -1,0 +1,24 @@
+{
+  "package": {
+    "id": "cbb5b42f-135b-47dc-8f40-d96aea0fcc2c",
+    "creatorId": "178e8d33-778a-491e-b3ec-424fcd5fbb1a",
+    "name": "World with WebUI",
+    "slug": "my-world-412845216",
+    "description": "World with WebUI (single page)",
+    "type": "World",
+    "contentRating": "Everyone",
+    "tags": [],
+    "isPrivate": true
+  },
+  "map": {
+    "name": "My Map",
+    "slug": "my-map-632523584",
+    "description": "A Map based on World with WebUI (single page) world.",
+    "contentRating": "Everyone",
+    "tags": [],
+    "isPrivate": true
+  },
+  "id": "f08f5b21-5af7-414f-a546-9a85dcb782aa",
+  "workspaceId": "4770097a-421f-e709-2a81-d4ac3c14f5a1",
+  "dependencyIds": []
+}
