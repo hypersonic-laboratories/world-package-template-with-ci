@@ -1,0 +1,43 @@
+name: "Create Package Archive"
+description: "Creates a gzipped tar archive from content and optional scripts folders"
+
+outputs:
+  archive-path:
+    description: "Path to the created archive file"
+    value: ${{ steps.create-tar.outputs.archive-path }}
+  archive-size:
+    description: "Size of the archive in bytes"
+    value: ${{ steps.get-size.outputs.archive-size }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate required folders
+      shell: bash
+      run: |
+        if [ ! -d "content" ]; then
+          echo "❌ Error: 'content' folder is required but not found"
+          exit 1
+        fi
+        echo "✅ Content folder found"
+
+    - name: Create archive
+      id: create-tar
+      shell: bash
+      run: |
+        ARCHIVE_PATH="content"
+
+        echo "Creating archive with content only..."
+        tar -cz -f "$ARCHIVE_PATH" -C "." "content"
+
+        echo "archive-path=$ARCHIVE_PATH" >> $GITHUB_OUTPUT
+        echo "✅ Archive created: $ARCHIVE_PATH"
+
+    - name: Get archive size
+      id: get-size
+      shell: bash
+      run: |
+        ARCHIVE_PATH="${{ steps.create-tar.outputs.archive-path }}"
+        ARCHIVE_SIZE=$(stat -c%s "$ARCHIVE_PATH" 2>/dev/null || stat -f%z "$ARCHIVE_PATH")
+        echo "archive-size=$ARCHIVE_SIZE" >> $GITHUB_OUTPUT
+        echo "📦 Archive size: $ARCHIVE_SIZE bytes"

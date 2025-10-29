@@ -1,0 +1,72 @@
+name: "Upload Package Files"
+description: "Uploads package archive to pre-signed URLs"
+
+inputs:
+  archive-path:
+    description: "Path to the package archive"
+    required: true
+  client-upload-url:
+    description: "Pre-signed URL for client upload"
+    required: true
+  server-upload-url:
+    description: "Pre-signed URL for server upload"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload to client URL
+      shell: bash
+      env:
+        ARCHIVE_PATH: ${{ inputs.archive-path }}
+        UPLOAD_URL: ${{ inputs.client-upload-url }}
+      run: |
+        if [ ! -f "$ARCHIVE_PATH" ]; then
+          echo "❌ Error: Archive file not found: $ARCHIVE_PATH"
+          exit 1
+        fi
+
+        echo "📤 Uploading to client URL..."
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X PUT \
+          -H "Content-Type: application/gzip" \
+          --data-binary "@$ARCHIVE_PATH" \
+          "$UPLOAD_URL")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+
+        if [ "$HTTP_CODE" -ne 200 ]; then
+          echo "❌ Error: Failed to upload to client URL (HTTP $HTTP_CODE)"
+          exit 1
+        fi
+
+        echo "✅ Client upload successful"
+
+    - name: Upload to server URL
+      shell: bash
+      env:
+        ARCHIVE_PATH: ${{ inputs.archive-path }}
+        UPLOAD_URL: ${{ inputs.server-upload-url }}
+      run: |
+        if [ ! -f "$ARCHIVE_PATH" ]; then
+          echo "❌ Error: Archive file not found: $ARCHIVE_PATH"
+          exit 1
+        fi
+
+        echo "📤 Uploading to server URL..."
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X PUT \
+          -H "Content-Type: application/gzip" \
+          --data-binary "@$ARCHIVE_PATH" \
+          "$UPLOAD_URL")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+
+        if [ "$HTTP_CODE" -ne 200 ]; then
+          echo "❌ Error: Failed to upload to server URL (HTTP $HTTP_CODE)"
+          exit 1
+        fi
+
+        echo "✅ Server upload successful"
