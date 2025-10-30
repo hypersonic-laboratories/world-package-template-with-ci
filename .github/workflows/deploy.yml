@@ -1,54 +1,54 @@
 name: Deploy Package
 
 on:
-    push:
-        branches:
-            - main # Change this to your preferred branch name
-    workflow_dispatch:
-        inputs:
-            apiUrl:
-                description: "API URL (e.g., https://helix-backend-staging.up.railway.app)"
-                required: true
-                type: string
-                default: "https://helix-backend-staging.up.railway.app"
+  push:
+    branches:
+      - main # Change this to your preferred branch name
+  workflow_dispatch:
+    inputs:
+      apiUrl:
+        description: "API URL (e.g., https://helix-backend-staging.up.railway.app)"
+        required: true
+        type: string
+        default: "https://helix-backend-staging.up.railway.app"
 
 env:
-    API_URL: ${{ inputs.apiUrl || 'https://helix-backend-staging.up.railway.app' }}
-    API_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+  API_URL: ${{ inputs.apiUrl || 'https://helix-backend-staging.up.railway.app' }}
+  API_TOKEN: ${{ secrets.ACCESS_TOKEN }}
 
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Create package archive
-              id: create-archive
-              uses: ./.github/actions/create-package-archive
+      - name: Create package archive
+        id: create-archive
+        uses: ./.github/actions/create-package-archive
 
-            - name: Create package version
-              id: create-version
-              uses: ./.github/actions/create-package-version
-              with:
-                  api-url: ${{ env.API_URL }}
-                  api-token: ${{ env.API_TOKEN }}
-                  archive-path: ${{ steps.create-archive.outputs.archive-path }}
-                  archive-size: ${{ steps.create-archive.outputs.archive-size }}
+      - name: Update package version
+        id: create-version
+        uses: ./.github/actions/create-package-version
+        with:
+          api-url: ${{ env.API_URL }}
+          api-token: ${{ env.API_TOKEN }}
+          archive-path: ${{ steps.create-archive.outputs.archive-path }}
+          archive-size: ${{ steps.create-archive.outputs.archive-size }}
 
-            - name: Upload package files
-              uses: ./.github/actions/upload-package-files
-              with:
-                  archive-path: ${{ steps.create-archive.outputs.archive-path }}
-                  client-upload-url: ${{ steps.create-version.outputs.client-upload-url }}
-                  server-upload-url: ${{ steps.create-version.outputs.server-upload-url }}
+      - name: Upload package files
+        uses: ./.github/actions/upload-package-files
+        with:
+          archive-path: ${{ steps.create-archive.outputs.archive-path }}
+          client-upload-url: ${{ steps.create-version.outputs.client-upload-url }}
+          server-upload-url: ${{ steps.create-version.outputs.server-upload-url }}
 
-            - name: Deployment summary
-              run: |
-                  echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-                  echo "" >> $GITHUB_STEP_SUMMARY
-                  echo "✅ Package version created successfully" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Version ID**: ${{ steps.create-version.outputs.version-id }}" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Package ID**: ${{ steps.create-version.outputs.package-id }}" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Archive Size**: ${{ steps.create-archive.outputs.archive-size }} bytes" >> $GITHUB_STEP_SUMMARY
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Package version updated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version ID**: ${{ steps.create-version.outputs.version-id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package ID**: ${{ steps.create-version.outputs.package-id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Archive Size**: ${{ steps.create-archive.outputs.archive-size }} bytes" >> $GITHUB_STEP_SUMMARY

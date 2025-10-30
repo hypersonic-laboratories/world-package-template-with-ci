@@ -1,5 +1,5 @@
-name: "Create Package Version"
-description: "Creates a new package version via API using metadata.json"
+name: "Update Package Version"
+description: "Updates an existing package version via API using metadata.json"
 
 inputs:
   api-url:
@@ -41,53 +41,59 @@ runs:
           exit 1
         fi
 
-        # Extract package ID and dependency IDs from metadata.json
+        # Extract package version ID, package ID, and dependency IDs from metadata.json
+        VERSION_ID=$(jq -r '.id' metadata.json)
         PACKAGE_ID=$(jq -r '.package.id' metadata.json)
         DEPENDENCY_IDS=$(jq -c '.dependencyIds // []' metadata.json)
+
+        if [ "$VERSION_ID" = "null" ] || [ -z "$VERSION_ID" ]; then
+          echo "❌ Error: id not found in metadata.json"
+          exit 1
+        fi
 
         if [ "$PACKAGE_ID" = "null" ] || [ -z "$PACKAGE_ID" ]; then
           echo "❌ Error: package.id not found in metadata.json"
           exit 1
         fi
 
+        echo "version-id=$VERSION_ID" >> $GITHUB_OUTPUT
         echo "package-id=$PACKAGE_ID" >> $GITHUB_OUTPUT
         echo "dependency-ids=$DEPENDENCY_IDS" >> $GITHUB_OUTPUT
+        echo "✅ Package Version ID: $VERSION_ID"
         echo "✅ Package ID: $PACKAGE_ID"
         echo "✅ Dependencies: $DEPENDENCY_IDS"
 
-    - name: Create package version
+    - name: Update package version
       id: create-version
       shell: bash
       env:
         API_URL: ${{ inputs.api-url }}
         API_TOKEN: ${{ inputs.api-token }}
+        VERSION_ID: ${{ steps.read-metadata.outputs.version-id }}
         PACKAGE_ID: ${{ steps.read-metadata.outputs.package-id }}
         DEPENDENCY_IDS: ${{ steps.read-metadata.outputs.dependency-ids }}
         ARCHIVE_SIZE: ${{ inputs.archive-size }}
       run: |
         # Construct the payload
         PAYLOAD=$(jq -n \
-          --arg packageId "$PACKAGE_ID" \
           --argjson clientSize "$ARCHIVE_SIZE" \
           --argjson serverSize "$ARCHIVE_SIZE" \
-          --argjson dependencyIds "$DEPENDENCY_IDS" \
           '{
-            packageId: $packageId,
             clientSize: $clientSize,
-            serverSize: $serverSize,
-            dependencyIds: $dependencyIds
+            serverSize: $serverSize
           }')
 
-        echo "📤 Creating package version..."
+        echo "📤 Updating package version..."
+        echo "Version ID: $VERSION_ID"
         echo "Payload: $PAYLOAD"
 
         # Make the API request
         RESPONSE=$(curl -s -w "\n%{http_code}" \
-          -X POST \
+          -X PATCH \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $API_TOKEN" \
           -d "$PAYLOAD" \
-          "$API_URL/api/v1/package-versions")
+          "$API_URL/api/v1/package-versions/$VERSION_ID")
 
         # Extract HTTP status code and body
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -96,25 +102,25 @@ runs:
         echo "HTTP Status: $HTTP_CODE"
 
         if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
-          echo "❌ Error: Failed to create package version (HTTP $HTTP_CODE)"
+          echo "❌ Error: Failed to update package version (HTTP $HTTP_CODE)"
           echo "Response: $BODY"
           exit 1
         fi
 
         # Parse response
-        VERSION_ID=$(echo "$BODY" | jq -r '.item.id')
+        UPDATED_VERSION_ID=$(echo "$BODY" | jq -r '.item.id')
         CLIENT_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.clientUploadUrl')
         SERVER_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.serverUploadUrl')
 
-        if [ "$VERSION_ID" = "null" ] || [ -z "$VERSION_ID" ]; then
+        if [ "$UPDATED_VERSION_ID" = "null" ] || [ -z "$UPDATED_VERSION_ID" ]; then
           echo "❌ Error: Failed to parse version ID from response"
           echo "Response: $BODY"
           exit 1
         fi
 
-        echo "version-id=$VERSION_ID" >> $GITHUB_OUTPUT
+        echo "version-id=$UPDATED_VERSION_ID" >> $GITHUB_OUTPUT
         echo "package-id=$PACKAGE_ID" >> $GITHUB_OUTPUT
         echo "client-upload-url=$CLIENT_UPLOAD_URL" >> $GITHUB_OUTPUT
         echo "server-upload-url=$SERVER_UPLOAD_URL" >> $GITHUB_OUTPUT
 
-        echo "✅ Package version created: $VERSION_ID"
+        echo "✅ Package version updated: $UPDATED_VERSION_ID"
