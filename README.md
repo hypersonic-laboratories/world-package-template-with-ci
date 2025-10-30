@@ -1,182 +1,343 @@
-# Helix Package Deployment Template# Helix Package Template with CI/CD
+# Helix Package Deployment Template# Helix Package Deployment Template# Helix Package Template with CI/CD
 
-Automated GitHub Actions workflow for deploying Helix packages directly from your workspace.A ready-to-use GitHub repository template for automatically deploying Helix packages with GitHub Actions.
+Automated GitHub Actions workflow for deploying Helix packages.Automated GitHub Actions workflow for deploying Helix packages directly from your workspace.A ready-to-use GitHub repository template for automatically deploying Helix packages with GitHub Actions.
 
-## 🚀 What is this?## 🚀 What is this?
+## Overview## 🚀 What is this?## 🚀 What is this?
 
-This template provides an automated CI/CD pipeline that deploys your Helix workspace to the Helix platform. When you push changes to your repository, it automatically:This template provides an automated deployment pipeline for Helix packages. When you push changes to your repository, it automatically:
+This repository contains a GitHub Actions workflow that automatically deploys your Helix workspace when you push changes. The workflow creates an archive of your content and scripts, updates the package version via the Helix API, and uploads the files to the CDN.This template provides an automated CI/CD pipeline that deploys your Helix workspace to the Helix platform. When you push changes to your repository, it automatically:This template provides an automated deployment pipeline for Helix packages. When you push changes to your repository, it automatically:
 
-1. ✅ Creates a compressed archive from your `content` and `scripts` folders1. ✅ Creates a gzipped tar archive from your `content` and `scripts` folders
+## Prerequisites1. ✅ Creates a compressed archive from your `content` and `scripts` folders1. ✅ Creates a gzipped tar archive from your `content` and `scripts` folders
 
-2. ✅ Updates your package version via the Helix API2. ✅ Creates a new package version via the Helix API
+- Helix workspace created in the Helix Game Client2. ✅ Updates your package version via the Helix API2. ✅ Creates a new package version via the Helix API
 
-3. ✅ Uploads your package to the Helix CDN3. ✅ Uploads your package to the Helix CDN
+- GitHub repository for your workspace
 
-4. ✅ Makes your changes live in the Helix ecosystem4. ✅ Makes your package available in the Helix ecosystem
+- Helix API access token3. ✅ Uploads your package to the Helix CDN3. ✅ Uploads your package to the Helix CDN
 
-## 📋 Prerequisites## 📋 Quick Start
+## Setup4. ✅ Makes your changes live in the Helix ecosystem4. ✅ Makes your package available in the Helix ecosystem
 
-- A Helix workspace (created in the Helix Game Client)### 1. Use This Template
+### 1. Copy Workflow Files## 📋 Prerequisites## 📋 Quick Start
 
-- A GitHub repository for your workspace
+Copy the `.github` folder from this template to your workspace repository:- A Helix workspace (created in the Helix Game Client)### 1. Use This Template
 
-- A Helix API access tokenClick "Use this template" → "Create a new repository" to create your own package repository.
+``````bash- A GitHub repository for your workspace
 
-## 🎯 Quick Setup (3 Steps)### 2. Set Up Your API Token
+cp -r .github /path/to/your/workspace/
 
-### Step 1: Copy the GitHub Actions Folder1. Go to your repository **Settings** → **Secrets and variables** → **Actions**
+```- A Helix API access tokenClick "Use this template" → "Create a new repository" to create your own package repository.
 
-2. Click **New repository secret**
 
-Copy the `.github` folder from this template into your Helix workspace repository:3. Add:
 
-- **Name**: `ACCESS_TOKEN`
+Repository structure:## 🎯 Quick Setup (3 Steps)### 2. Set Up Your API Token
 
-```bash - **Secret**: Your Helix API authentication token
 
-# From this template repository
 
-cp -r .github /path/to/your/workspace/### 3. Update Package Metadata
+```### Step 1: Copy the GitHub Actions Folder1. Go to your repository **Settings** → **Secrets and variables** → **Actions**
 
-```
+your-workspace/
 
-Edit `metadata.json` with your package information:
+├── .github/2. Click **New repository secret**
 
-Your workspace should have this structure:
+│   ├── workflows/
 
-````json
+│   │   └── deploy.ymlCopy the `.github` folder from this template into your Helix workspace repository:3. Add:
+
+│   └── actions/
+
+│       ├── create-package-archive/- **Name**: `ACCESS_TOKEN`
+
+│       ├── create-package-version/
+
+│       └── upload-package-files/```bash - **Secret**: Your Helix API authentication token
+
+├── content/
+
+├── scripts/# From this template repository
+
+└── metadata.json
+
+```cp -r .github /path/to/your/workspace/### 3. Update Package Metadata
+
+
+
+### 2. Add API Token Secret```
+
+
+
+Add a repository secret named `ACCESS_TOKEN` containing your Helix API token:Edit `metadata.json` with your package information:
+
+
+
+1. Go to repository SettingsYour workspace should have this structure:
+
+2. Navigate to Secrets and variables > Actions
+
+3. Create new secret: `ACCESS_TOKEN`````json
+
+4. Set the value to your Helix API token
 
 ```{
 
+### 3. Deploy
+
 your-workspace/  "package": {
+
+Push the `.github` folder to your repository:
 
 ├── .github/              # ← The folder you just copied    "id": "YOUR-PACKAGE-UUID",
 
-│   ├── workflows/    "creatorId": "YOUR-CREATOR-UUID",
+```bash
 
-│   │   └── deploy.yml    "name": "Your Package Name",
+git add .github│   ├── workflows/    "creatorId": "YOUR-CREATOR-UUID",
 
-│   └── actions/    "slug": "your-package-slug",
+git commit -m "Add deployment workflow"
 
-│       ├── create-package-archive/    "description": "Your package description",
+git push│   │   └── deploy.yml    "name": "Your Package Name",
 
-│       ├── create-package-version/    "type": "World",
+``````
 
-│       └── upload-package-files/    "contentRating": "Everyone",
+│ └── actions/ "slug": "your-package-slug",
 
-├── content/              # Your workspace content (auto-generated by Helix)    "tags": ["tag1", "tag2"],
+The workflow will automatically run on every push to the `main` branch.
 
-├── scripts/              # Your workspace scripts (if any)    "isPrivate": true
+│ ├── create-package-archive/ "description": "Your package description",
 
-└── metadata.json         # Your workspace metadata (auto-generated by Helix)  },
+## Configuration
 
-```  "dependencyIds": ["dependency-uuid-1", "dependency-uuid-2"]
+│ ├── create-package-version/ "type": "World",
 
-}
+### Deployment Branch
 
-### Step 2: Add Your API Token to GitHub```
+│ └── upload-package-files/ "contentRating": "Everyone",
+
+The workflow triggers on pushes to `main` by default. To change this, edit `.github/workflows/deploy.yml`:
+
+├── content/ # Your workspace content (auto-generated by Helix) "tags": ["tag1", "tag2"],
+
+```````yaml
+
+on:├── scripts/              # Your workspace scripts (if any)    "isPrivate": true
+
+    push:
+
+        branches:└── metadata.json         # Your workspace metadata (auto-generated by Helix)  },
+
+            - main
+
+``````  "dependencyIds": ["dependency-uuid-1", "dependency-uuid-2"]
 
 
 
-1. Go to your repository on GitHub**Important**: Replace `YOUR-PACKAGE-UUID` with your actual package UUID from the Helix platform.
+### API URL}
 
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
 
-3. Click **New repository secret**### 4. Add Your Package Content
 
-4. Add the secret:
+The default API URL is `https://helix-backend-staging.up.railway.app`. To change it, edit `.github/workflows/deploy.yml`:### Step 2: Add Your API Token to GitHub```
 
-   - **Name**: `ACCESS_TOKEN`Replace the content in these folders with your package files:
 
-   - **Secret**: Your Helix API authentication token
 
-````
+```yaml
+
+default: "https://helix-backend-staging.up.railway.app"
+
+```1. Go to your repository on GitHub**Important**: Replace `YOUR-PACKAGE-UUID` with your actual package UUID from the Helix platform.
+
+
+
+### Multiple Branches2. Navigate to **Settings** → **Secrets and variables** → **Actions**
+
+
+
+To deploy from multiple branches:3. Click **New repository secret**### 4. Add Your Package Content
+
+
+
+```yaml4. Add the secret:
+
+branches:
+
+    - main   - **Name**: `ACCESS_TOKEN`Replace the content in these folders with your package files:
+
+    - staging
+
+    - production   - **Secret**: Your Helix API authentication token
+
+```````
+
+``````
+
+## How It Works
 
 ### Step 3: Push and Deploy!your-repo/
 
+The workflow performs the following steps:
+
 ├── content/ # REQUIRED - Your package content (maps, assets, etc.)
 
-Commit and push the `.github` folder to your repository:│ └── map.json
+1. Creates a tar.gz archive from `content/` and `scripts/` folders
 
-├── scripts/ # OPTIONAL - Your package scripts
+2. Reads the package version ID from `metadata.json`Commit and push the `.github` folder to your repository:│ └── map.json
+
+3. Calls PATCH `/api/v1/package-versions/{id}` with archive size
+
+4. Receives pre-signed upload URLs├── scripts/ # OPTIONAL - Your package scripts
+
+5. Uploads archive to client and server URLs
 
 ````bash│ └── ...
 
+## Monitoring
+
 git add .github└── metadata.json     # Package metadata
+
+View deployment status in the Actions tab. Successful deployments show:
 
 git commit -m "Add GitHub Actions deployment workflow"```
 
-git push
+```
 
-```### 5. Push to Deploy
+Deployment Summarygit push
 
+- Version ID: f08f5b21-5af7-414f-a546-9a85dcb782aa
 
+- Package ID: cbb5b42f-135b-47dc-8f40-d96aea0fcc2c```### 5. Push to Deploy
 
-That's it! From now on, every push to the `main` branch will automatically deploy your workspace.Commit and push your changes to the `main` branch:
+- Archive Size: 12345678 bytes
 
-
-
-## 🔧 Configuration```bash
-
-git add .
-
-### Change the Deployment Branchgit commit -m "Update package content"
-
-git push
-
-By default, the workflow triggers on pushes to the `main` branch.```
+```
 
 
 
-To change this, edit `.github/workflows/deploy.yml` (line 6):The GitHub Action will automatically run and deploy your package! 🎉
+## Manual DeploymentThat's it! From now on, every push to the `main` branch will automatically deploy your workspace.Commit and push your changes to the `main` branch:
 
 
 
-```yaml## ⚙️ Configuration
+To manually trigger a deployment:
 
-on:
 
-    push:### API URL Configuration
 
-        branches:
+1. Navigate to Actions tab## 🔧 Configuration```bash
 
-            - main  # Change this to your preferred branchThe workflow uses the staging API by default: `https://helix-backend-staging.up.railway.app`
+2. Select Deploy Package workflow
 
-````
+3. Click Run workflowgit add .
 
-To change the API URL:
 
-### Change the API URL
 
-1. Open `.github/workflows/deploy.yml`
+## Workspace Files### Change the Deployment Branchgit commit -m "Update package content"
 
-By default, the workflow uses the staging API: `https://helix-backend-staging.up.railway.app`2. Find the `apiUrl` default value (around line 9)
 
-3. Change it to your desired API endpoint
 
-To change this, edit `.github/workflows/deploy.yml` (line 12):
+- `metadata.json` - Auto-generated by Helix, contains package and version IDs (do not edit manually)git push
 
-````yaml
+- `content/` - Workspace content (required)
 
-```yamlapiUrl:
+- `scripts/` - Lua scripts (optional)By default, the workflow triggers on pushes to the `main` branch.```
 
-default: "https://helix-backend-staging.up.railway.app"  # Change this  description: "API URL"
 
-```  required: true
 
-  type: string
+## Troubleshooting
 
-### Deploy to Multiple Branches  default: "https://your-api-url.com" # Change this
 
-````
 
-You can configure the workflow to deploy from multiple branches:
+### Error: 'content' folder is required but not foundTo change this, edit `.github/workflows/deploy.yml` (line 6):The GitHub Action will automatically run and deploy your package! 🎉
 
-### Branch Configuration
 
-````yaml
 
-on:By default, the workflow triggers on pushes to the `main` branch.
+The workspace is missing the `content/` folder. This folder is automatically created by Helix Game Client.
+
+
+
+### Error: id not found in metadata.json```yaml## ⚙️ Configuration
+
+
+
+The `metadata.json` file is missing or doesn't contain the `id` field. Ensure the file was generated by Helix and has not been manually edited.on:
+
+
+
+### Error: Failed to update package version (HTTP 401)    push:### API URL Configuration
+
+
+
+The API token is invalid or expired. Verify the `ACCESS_TOKEN` secret is set correctly in repository settings.        branches:
+
+
+
+### Error: Failed to update package version (HTTP 404)            - main  # Change this to your preferred branchThe workflow uses the staging API by default: `https://helix-backend-staging.up.railway.app`
+
+
+
+The package version ID in `metadata.json` doesn't exist. Ensure you've created the package version in Helix before deploying.````
+
+
+
+### Scripts folder not includedTo change the API URL:
+
+
+
+The `scripts/` folder must exist and contain at least one file to be included in the deployment.### Change the API URL
+
+
+
+## Security1. Open `.github/workflows/deploy.yml`
+
+
+
+- Never commit API tokens to the repositoryBy default, the workflow uses the staging API: `https://helix-backend-staging.up.railway.app`2. Find the `apiUrl` default value (around line 9)
+
+- Use GitHub Secrets for all sensitive data
+
+- Keep private repositories if content is proprietary3. Change it to your desired API endpoint
+
+
+
+## API ReferenceTo change this, edit `.github/workflows/deploy.yml` (line 12):
+
+
+
+**PATCH** `/api/v1/package-versions/{packageVersionId}`````yaml
+
+
+
+Request:```yamlapiUrl:
+
+```json
+
+{default: "https://helix-backend-staging.up.railway.app"  # Change this  description: "API URL"
+
+  "clientSize": 12345,
+
+  "serverSize": 12345```  required: true
+
+}
+
+```  type: string
+
+
+
+Response:### Deploy to Multiple Branches  default: "https://your-api-url.com" # Change this
+
+```json
+
+{````
+
+  "item": {
+
+    "id": "version-uuid",You can configure the workflow to deploy from multiple branches:
+
+    "packageId": "package-uuid",
+
+    "clientUploadUrl": "https://...",### Branch Configuration
+
+    "serverUploadUrl": "https://..."
+
+  }````yaml
+
+}
+
+```on:By default, the workflow triggers on pushes to the `main` branch.
+
 
     push:
 
@@ -280,7 +441,7 @@ After each successful deployment, you'll see:- **content/** folder (required) - 
 
 - **scripts/** folder (optional) - Included if present
 
-````
+``````
 
 ## Deployment SummaryThe workflow automatically detects if you have a `scripts` folder and includes it in the archive.
 
