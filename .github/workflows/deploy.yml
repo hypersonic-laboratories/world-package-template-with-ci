@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       apiUrl:
-        description: "API URL (e.g., https://helix-backend-staging.up.railway.app)"
+        description: "API URL (e.g., https://api.helixgame.com)"
         required: true
         type: string
-        default: "https://helix-backend-staging.up.railway.app"
+        default: "https://api.helixgame.com"
 
 env:
-  API_URL: ${{ inputs.apiUrl || 'https://helix-backend-staging.up.railway.app' }}
+  API_URL: ${{ inputs.apiUrl || 'https://api.helixgame.com' }}
   API_TOKEN: ${{ secrets.ACCESS_TOKEN }}
 
 jobs:

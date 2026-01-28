@@ -8,7 +8,7 @@
     "type": "World",
     "contentRating": "Everyone",
     "tags": ["Sandbox"],
-    "isPrivate": false
+    "isPrivate": true
   },
   "id": "44f6be92-60fa-4666-b052-945d8d551a48",
   "dependencyIds": []
