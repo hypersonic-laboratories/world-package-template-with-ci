@@ -11,6 +11,12 @@ inputs:
   server-upload-url:
     description: "Pre-signed URL for server upload"
     required: true
+  config-path:
+    description: "Path to config.json file (optional)"
+    required: false
+  metadata-upload-url:
+    description: "Pre-signed URL for metadata upload (optional)"
+    required: false
 
 runs:
   using: "composite"
@@ -70,3 +76,37 @@ runs:
         fi
 
         echo "✅ Server upload successful"
+
+    - name: Upload config.json to metadata URL
+      shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config-path }}
+        UPLOAD_URL: ${{ inputs.metadata-upload-url }}
+      run: |
+        # Skip if no config or upload URL
+        if [ -z "$CONFIG_PATH" ] || [ -z "$UPLOAD_URL" ]; then
+          echo "ℹ️  No metadata to upload (config or URL not provided)"
+          exit 0
+        fi
+
+        if [ ! -f "$CONFIG_PATH" ]; then
+          echo "❌ Error: Config file not found: $CONFIG_PATH"
+          exit 1
+        fi
+
+        echo "📤 Uploading config.json to metadata URL..."
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X PUT \
+          -H "Content-Type: application/json" \
+          --data-binary "@$CONFIG_PATH" \
+          "$UPLOAD_URL")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+
+        if [ "$HTTP_CODE" -ne 200 ]; then
+          echo "❌ Error: Failed to upload config.json (HTTP $HTTP_CODE)"
+          exit 1
+        fi
+
+        echo "✅ Config.json upload successful"

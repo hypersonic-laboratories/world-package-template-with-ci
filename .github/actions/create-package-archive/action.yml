@@ -51,6 +51,22 @@ runs:
       shell: bash
       run: |
         ARCHIVE_PATH="${{ steps.create-tar.outputs.archive-path }}"
-        ARCHIVE_SIZE=$(stat -c%s "$ARCHIVE_PATH" 2>/dev/null || stat -f%z "$ARCHIVE_PATH")
+
+        # Verify archive exists
+        if [ ! -f "$ARCHIVE_PATH" ]; then
+          echo "❌ Error: Archive file not found: $ARCHIVE_PATH"
+          exit 1
+        fi
+
+        # Get file size (Linux syntax first, then macOS/BSD)
+        ARCHIVE_SIZE=$(stat -c%s "$ARCHIVE_PATH" 2>/dev/null || stat -f%z "$ARCHIVE_PATH" 2>/dev/null)
+
+        # Validate size is not empty or zero
+        if [ -z "$ARCHIVE_SIZE" ] || [ "$ARCHIVE_SIZE" -eq 0 ]; then
+          echo "❌ Error: Archive size is zero or could not be determined"
+          ls -lh "$ARCHIVE_PATH"
+          exit 1
+        fi
+
         echo "archive-size=$ARCHIVE_SIZE" >> $GITHUB_OUTPUT
         echo "📦 Archive size: $ARCHIVE_SIZE bytes"

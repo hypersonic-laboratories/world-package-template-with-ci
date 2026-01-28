@@ -43,6 +43,8 @@ jobs:
           archive-path: ${{ steps.create-archive.outputs.archive-path }}
           client-upload-url: ${{ steps.create-version.outputs.client-upload-url }}
           server-upload-url: ${{ steps.create-version.outputs.server-upload-url }}
+          config-path: ${{ steps.create-version.outputs.config-path }}
+          metadata-upload-url: ${{ steps.create-version.outputs.metadata-upload-url }}
 
       - name: Deployment summary
         run: |

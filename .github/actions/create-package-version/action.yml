@@ -28,6 +28,15 @@ outputs:
   server-upload-url:
     description: "Pre-signed URL for server upload"
     value: ${{ steps.create-version.outputs.server-upload-url }}
+  metadata-upload-url:
+    description: "Pre-signed URL for metadata upload"
+    value: ${{ steps.create-version.outputs.metadata-upload-url }}
+  config-path:
+    description: "Path to config.json file (if exists)"
+    value: ${{ steps.extract-config.outputs.config-path }}
+  metadata-size:
+    description: "Size of config.json in bytes (if exists)"
+    value: ${{ steps.extract-config.outputs.metadata-size }}
 
 runs:
   using: "composite"
@@ -63,6 +72,45 @@ runs:
         echo "✅ Package ID: $PACKAGE_ID"
         echo "✅ Dependencies: $DEPENDENCY_IDS"
 
+    - name: Extract config from metadata
+      id: extract-config
+      shell: bash
+      run: |
+        # Check if config field exists in metadata.json
+        CONFIG=$(jq -r '.config // null' metadata.json)
+
+        if [ "$CONFIG" != "null" ]; then
+          echo "📝 Config field found in metadata.json"
+
+          # Extract config to config.json file
+          jq '.config' metadata.json > config.json
+
+          # Verify config.json was created
+          if [ ! -f "config.json" ]; then
+            echo "❌ Error: Failed to create config.json"
+            exit 1
+          fi
+
+          # Get config.json size
+          CONFIG_SIZE=$(stat -c%s "config.json" 2>/dev/null || stat -f%z "config.json" 2>/dev/null)
+
+          if [ -z "$CONFIG_SIZE" ] || [ "$CONFIG_SIZE" -eq 0 ]; then
+            echo "❌ Error: config.json size is zero or could not be determined"
+            ls -lh config.json
+            exit 1
+          fi
+
+          echo "config-path=config.json" >> $GITHUB_OUTPUT
+          echo "metadata-size=$CONFIG_SIZE" >> $GITHUB_OUTPUT
+          echo "has-config=true" >> $GITHUB_OUTPUT
+          echo "✅ Config extracted to config.json ($CONFIG_SIZE bytes)"
+        else
+          echo "ℹ️  No config field in metadata.json"
+          echo "config-path=" >> $GITHUB_OUTPUT
+          echo "metadata-size=0" >> $GITHUB_OUTPUT
+          echo "has-config=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Update package version
       id: create-version
       shell: bash
@@ -73,15 +121,33 @@ runs:
         PACKAGE_ID: ${{ steps.read-metadata.outputs.package-id }}
         DEPENDENCY_IDS: ${{ steps.read-metadata.outputs.dependency-ids }}
         ARCHIVE_SIZE: ${{ inputs.archive-size }}
+        METADATA_SIZE: ${{ steps.extract-config.outputs.metadata-size }}
       run: |
-        # Construct the payload
-        PAYLOAD=$(jq -n \
-          --argjson clientSize "$ARCHIVE_SIZE" \
-          --argjson serverSize "$ARCHIVE_SIZE" \
-          '{
-            clientSize: $clientSize,
-            serverSize: $serverSize
-          }')
+        # Construct the payload with config and metadataSize if config exists
+        if [ "$METADATA_SIZE" -gt 0 ] && [ -f "config.json" ]; then
+          # Read config object from metadata.json
+          CONFIG_OBJECT=$(jq -c '.config' metadata.json)
+
+          PAYLOAD=$(jq -n \
+            --argjson clientSize "$ARCHIVE_SIZE" \
+            --argjson serverSize "$ARCHIVE_SIZE" \
+            --argjson metadataSize "$METADATA_SIZE" \
+            --argjson config "$CONFIG_OBJECT" \
+            '{
+              clientSize: $clientSize,
+              serverSize: $serverSize,
+              metadataSize: $metadataSize,
+              config: $config
+            }')
+        else
+          PAYLOAD=$(jq -n \
+            --argjson clientSize "$ARCHIVE_SIZE" \
+            --argjson serverSize "$ARCHIVE_SIZE" \
+            '{
+              clientSize: $clientSize,
+              serverSize: $serverSize
+            }')
+        fi
 
         echo "📤 Updating package version..."
         echo "Version ID: $VERSION_ID"
@@ -111,6 +177,7 @@ runs:
         UPDATED_VERSION_ID=$(echo "$BODY" | jq -r '.item.id')
         CLIENT_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.clientUploadUrl')
         SERVER_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.serverUploadUrl')
+        METADATA_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.metadataUploadUrl // ""')
 
         if [ "$UPDATED_VERSION_ID" = "null" ] || [ -z "$UPDATED_VERSION_ID" ]; then
           echo "❌ Error: Failed to parse version ID from response"
@@ -122,5 +189,9 @@ runs:
         echo "package-id=$PACKAGE_ID" >> $GITHUB_OUTPUT
         echo "client-upload-url=$CLIENT_UPLOAD_URL" >> $GITHUB_OUTPUT
         echo "server-upload-url=$SERVER_UPLOAD_URL" >> $GITHUB_OUTPUT
+        echo "metadata-upload-url=$METADATA_UPLOAD_URL" >> $GITHUB_OUTPUT
 
         echo "✅ Package version updated: $UPDATED_VERSION_ID"
+        if [ -n "$METADATA_UPLOAD_URL" ]; then
+          echo "✅ Metadata upload URL received"
+        fi
