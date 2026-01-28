@@ -11,5 +11,11 @@
     "isPrivate": true
   },
   "id": "44f6be92-60fa-4666-b052-945d8d551a48",
-  "dependencyIds": []
+  "dependencyIds": [],
+  "config": {
+    "version": "1.0.0",
+    "main": "index.js",
+    "assets": [],
+    "scripts": []
+  }
 }
