@@ -159,6 +159,7 @@ runs:
             '{key: $key, uploadId: $uploadId, parts: $parts}')
 
           echo "📦 [$key] completing multipart upload..."
+          echo "🌐 Endpoint: POST $API_URL/api/v1/package-versions/$VERSION_ID/uploads/complete"
           complete_response=$(curl -s -w "\n%{http_code}" \
             -X POST \
             -H "Content-Type: application/json" \

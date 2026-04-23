@@ -138,7 +138,7 @@ runs:
         fi
 
         echo "📤 Updating package version..."
-        echo "Version ID: $VERSION_ID"
+        echo "🌐 Endpoint: PATCH $API_URL/api/v1/package-versions/$VERSION_ID"
         echo "Payload: $PAYLOAD"
 
         RESPONSE=$(curl -s -w "\n%{http_code}" \
