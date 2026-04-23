@@ -55,13 +55,24 @@ runs:
           esac
         }
 
+        content_type_for_key() {
+          case "$1" in
+            content)  echo "application/gzip" ;;
+            metadata) echo "application/json" ;;
+            *)        echo "application/octet-stream" ;;
+          esac
+        }
+
         upload_single() {
           local local_path="$1" url="$2" key="$3"
-          echo "📤 [$key] single-PUT upload ($(stat -c%s "$local_path") bytes)"
+          local content_type
+          content_type=$(content_type_for_key "$key")
+          echo "📤 [$key] single-PUT upload ($(stat -c%s "$local_path") bytes, Content-Type: $content_type)"
 
           local http_code
           http_code=$(curl -s -o /dev/null -w "%{http_code}" \
             -X PUT \
+            -H "Content-Type: $content_type" \
             --data-binary "@$local_path" \
             "$url")
 
