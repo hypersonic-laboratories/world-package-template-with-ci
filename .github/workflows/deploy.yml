@@ -7,13 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       apiUrl:
-        description: "API URL (e.g., https://api.helixgame.com)"
-        required: true
+        description: "Override API URL for this run (leave blank to use repo variable API_URL)"
+        required: false
         type: string
-        default: "https://api.helixgame.com"
 
 env:
-  API_URL: ${{ inputs.apiUrl || 'https://api.helixgame.com' }}
+  API_URL: ${{ inputs.apiUrl || vars.API_URL }}
   API_TOKEN: ${{ secrets.ACCESS_TOKEN }}
 
 jobs:
@@ -21,6 +20,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate API URL
+        run: |
+          if [ -z "${API_URL:-}" ]; then
+            echo "::error::API_URL is not set. Configure a repository variable named 'API_URL' at Settings → Secrets and variables → Actions → Variables, or supply it as the 'apiUrl' input when running the workflow manually."
+            exit 1
+          fi
+          echo "🌐 Using API: $API_URL"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -36,15 +43,17 @@ jobs:
           api-token: ${{ env.API_TOKEN }}
           archive-path: ${{ steps.create-archive.outputs.archive-path }}
           archive-size: ${{ steps.create-archive.outputs.archive-size }}
+          archive-xxh3: ${{ steps.create-archive.outputs.archive-xxh3 }}
 
       - name: Upload package files
         uses: ./.github/actions/upload-package-files
         with:
+          api-url: ${{ env.API_URL }}
+          api-token: ${{ env.API_TOKEN }}
+          version-id: ${{ steps.create-version.outputs.version-id }}
+          upload-plan-path: ${{ steps.create-version.outputs.upload-plan-path }}
           archive-path: ${{ steps.create-archive.outputs.archive-path }}
-          client-upload-url: ${{ steps.create-version.outputs.client-upload-url }}
-          server-upload-url: ${{ steps.create-version.outputs.server-upload-url }}
           config-path: ${{ steps.create-version.outputs.config-path }}
-          metadata-upload-url: ${{ steps.create-version.outputs.metadata-upload-url }}
 
       - name: Deployment summary
         run: |

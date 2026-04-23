@@ -1,112 +1,208 @@
 name: "Upload Package Files"
-description: "Uploads package archive to pre-signed URLs"
+description: "Uploads each package file entry using single-PUT or multipart, and completes multipart uploads via the API"
 
 inputs:
+  api-url:
+    description: "API base URL (used for the multipart completion endpoint)"
+    required: true
+  api-token:
+    description: "API authentication token"
+    required: true
+  version-id:
+    description: "Package version ID (used for the multipart completion endpoint)"
+    required: true
+  upload-plan-path:
+    description: "Path to the JSON file produced by create-package-version (the files[] response)"
+    required: true
   archive-path:
-    description: "Path to the package archive"
-    required: true
-  client-upload-url:
-    description: "Pre-signed URL for client upload"
-    required: true
-  server-upload-url:
-    description: "Pre-signed URL for server upload"
+    description: "Local path for the 'content' file entry"
     required: true
   config-path:
-    description: "Path to config.json file (optional)"
-    required: false
-  metadata-upload-url:
-    description: "Pre-signed URL for metadata upload (optional)"
+    description: "Local path for the 'metadata' file entry (optional)"
     required: false
 
 runs:
   using: "composite"
   steps:
-    - name: Upload to client URL
+    - name: Upload files
       shell: bash
       env:
+        API_URL: ${{ inputs.api-url }}
+        API_TOKEN: ${{ inputs.api-token }}
+        VERSION_ID: ${{ inputs.version-id }}
+        UPLOAD_PLAN_PATH: ${{ inputs.upload-plan-path }}
         ARCHIVE_PATH: ${{ inputs.archive-path }}
-        UPLOAD_URL: ${{ inputs.client-upload-url }}
-      run: |
-        if [ ! -f "$ARCHIVE_PATH" ]; then
-          echo "❌ Error: Archive file not found: $ARCHIVE_PATH"
-          exit 1
-        fi
-
-        echo "📤 Uploading to client URL..."
-
-        RESPONSE=$(curl -s -w "\n%{http_code}" \
-          -X PUT \
-          -H "Content-Type: application/gzip" \
-          --data-binary "@$ARCHIVE_PATH" \
-          "$UPLOAD_URL")
-
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-        if [ "$HTTP_CODE" -ne 200 ]; then
-          echo "❌ Error: Failed to upload to client URL (HTTP $HTTP_CODE)"
-          exit 1
-        fi
-
-        echo "✅ Client upload successful"
-
-    - name: Upload to server URL
-      shell: bash
-      env:
-        ARCHIVE_PATH: ${{ inputs.archive-path }}
-        UPLOAD_URL: ${{ inputs.server-upload-url }}
-      run: |
-        if [ ! -f "$ARCHIVE_PATH" ]; then
-          echo "❌ Error: Archive file not found: $ARCHIVE_PATH"
-          exit 1
-        fi
-
-        echo "📤 Uploading to server URL..."
-
-        RESPONSE=$(curl -s -w "\n%{http_code}" \
-          -X PUT \
-          -H "Content-Type: application/gzip" \
-          --data-binary "@$ARCHIVE_PATH" \
-          "$UPLOAD_URL")
-
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-        if [ "$HTTP_CODE" -ne 200 ]; then
-          echo "❌ Error: Failed to upload to server URL (HTTP $HTTP_CODE)"
-          exit 1
-        fi
-
-        echo "✅ Server upload successful"
-
-    - name: Upload config.json to metadata URL
-      shell: bash
-      env:
         CONFIG_PATH: ${{ inputs.config-path }}
-        UPLOAD_URL: ${{ inputs.metadata-upload-url }}
       run: |
-        # Skip if no config or upload URL
-        if [ -z "$CONFIG_PATH" ] || [ -z "$UPLOAD_URL" ]; then
-          echo "ℹ️  No metadata to upload (config or URL not provided)"
-          exit 0
-        fi
+        set -euo pipefail
 
-        if [ ! -f "$CONFIG_PATH" ]; then
-          echo "❌ Error: Config file not found: $CONFIG_PATH"
+        if [ ! -f "$UPLOAD_PLAN_PATH" ]; then
+          echo "❌ Error: upload plan not found at $UPLOAD_PLAN_PATH"
           exit 1
         fi
 
-        echo "📤 Uploading config.json to metadata URL..."
+        TMPDIR="${RUNNER_TEMP:-/tmp}"
 
-        RESPONSE=$(curl -s -w "\n%{http_code}" \
-          -X PUT \
-          -H "Content-Type: application/json" \
-          --data-binary "@$CONFIG_PATH" \
-          "$UPLOAD_URL")
+        url_decode() {
+          python3 -c 'import urllib.parse, sys; sys.stdout.write(urllib.parse.unquote(sys.argv[1]))' "$1"
+        }
 
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        resolve_local_path() {
+          case "$1" in
+            content)  echo "$ARCHIVE_PATH" ;;
+            metadata) echo "$CONFIG_PATH" ;;
+            *)        echo "" ;;
+          esac
+        }
 
-        if [ "$HTTP_CODE" -ne 200 ]; then
-          echo "❌ Error: Failed to upload config.json (HTTP $HTTP_CODE)"
-          exit 1
-        fi
+        upload_single() {
+          local local_path="$1" url="$2" key="$3"
+          echo "📤 [$key] single-PUT upload ($(stat -c%s "$local_path") bytes)"
 
-        echo "✅ Config.json upload successful"
+          local http_code
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X PUT \
+            --data-binary "@$local_path" \
+            "$url")
+
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ [$key] upload failed (HTTP $http_code)"
+            exit 1
+          fi
+
+          echo "✅ [$key] upload successful"
+        }
+
+        upload_multipart() {
+          local local_path="$1" key="$2" parts_json="$3"
+
+          local file_size num_parts part_size
+          file_size=$(stat -c%s "$local_path")
+          num_parts=$(echo "$parts_json" | jq 'length')
+          # Equal-sized chunks; the last one gets whatever's left.
+          part_size=$(( (file_size + num_parts - 1) / num_parts ))
+
+          echo "📤 [$key] multipart upload: $num_parts parts × ~$part_size bytes (total $file_size)"
+
+          local first_url upload_id_enc upload_id
+          first_url=$(echo "$parts_json" | jq -r '.[0].partUrl')
+          upload_id_enc=$(echo "$first_url" | sed -n 's/.*[?&]uploadId=\([^&]*\).*/\1/p')
+
+          if [ -z "$upload_id_enc" ]; then
+            echo "❌ [$key] could not extract uploadId from partUrl query string"
+            exit 1
+          fi
+
+          upload_id=$(url_decode "$upload_id_enc")
+
+          local chunk_file headers_file completed_parts
+          chunk_file=$(mktemp -p "$TMPDIR")
+          headers_file=$(mktemp -p "$TMPDIR")
+          completed_parts='[]'
+
+          local i
+          for (( i = 0; i < num_parts; i++ )); do
+            local part_num part_url offset length
+            part_num=$(echo "$parts_json" | jq -r ".[$i].partNumber")
+            part_url=$(echo "$parts_json" | jq -r ".[$i].partUrl")
+            offset=$(( i * part_size ))
+            length=$(( file_size - offset ))
+            if [ "$length" -gt "$part_size" ]; then
+              length=$part_size
+            fi
+
+            echo "  ↪ part $part_num: offset=$offset length=$length"
+
+            dd if="$local_path" of="$chunk_file" \
+               bs=8M iflag=skip_bytes,count_bytes \
+               skip="$offset" count="$length" status=none
+
+            : > "$headers_file"
+            local http_code
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -D "$headers_file" \
+              -X PUT \
+              --data-binary "@$chunk_file" \
+              "$part_url")
+
+            if [ "$http_code" -ne 200 ]; then
+              echo "❌ [$key] part $part_num upload failed (HTTP $http_code)"
+              cat "$headers_file" >&2 || true
+              exit 1
+            fi
+
+            local etag
+            etag=$(grep -i '^etag:' "$headers_file" | tail -n1 \
+              | sed -E 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//' \
+              | tr -d '\r\n"')
+
+            if [ -z "$etag" ]; then
+              echo "❌ [$key] no ETag returned for part $part_num"
+              cat "$headers_file" >&2 || true
+              exit 1
+            fi
+
+            echo "    ✓ ETag: $etag"
+
+            completed_parts=$(echo "$completed_parts" \
+              | jq --argjson pn "$part_num" --arg et "$etag" \
+                  '. + [{partNumber: $pn, eTag: $et}]')
+          done
+
+          rm -f "$chunk_file" "$headers_file"
+
+          local complete_payload complete_response complete_code complete_body
+          complete_payload=$(jq -n \
+            --arg key "$key" \
+            --arg uploadId "$upload_id" \
+            --argjson parts "$completed_parts" \
+            '{key: $key, uploadId: $uploadId, parts: $parts}')
+
+          echo "📦 [$key] completing multipart upload..."
+          complete_response=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_TOKEN" \
+            -d "$complete_payload" \
+            "$API_URL/api/v1/package-versions/$VERSION_ID/uploads/complete")
+
+          complete_code=$(echo "$complete_response" | tail -n1)
+          complete_body=$(echo "$complete_response" | sed '$d')
+
+          if [ "$complete_code" -ne 200 ] && [ "$complete_code" -ne 201 ]; then
+            echo "❌ [$key] multipart completion failed (HTTP $complete_code)"
+            echo "Response: $complete_body"
+            exit 1
+          fi
+
+          echo "✅ [$key] multipart upload completed"
+        }
+
+        NUM_ENTRIES=$(jq 'length' "$UPLOAD_PLAN_PATH")
+        for (( idx = 0; idx < NUM_ENTRIES; idx++ )); do
+          KEY=$(jq -r ".[$idx].key" "$UPLOAD_PLAN_PATH")
+          UPLOAD_URL=$(jq -r ".[$idx].uploadUrl // empty" "$UPLOAD_PLAN_PATH")
+          MULTIPART_PARTS=$(jq -c ".[$idx].uploadMultipartUrls // []" "$UPLOAD_PLAN_PATH")
+          MULTIPART_LEN=$(echo "$MULTIPART_PARTS" | jq 'length')
+
+          LOCAL_PATH=$(resolve_local_path "$KEY")
+          if [ -z "$LOCAL_PATH" ]; then
+            echo "❌ No local path mapped for file key '$KEY'"
+            exit 1
+          fi
+          if [ ! -f "$LOCAL_PATH" ]; then
+            echo "❌ Local file for '$KEY' not found at $LOCAL_PATH"
+            exit 1
+          fi
+
+          if [ -n "$UPLOAD_URL" ]; then
+            upload_single "$LOCAL_PATH" "$UPLOAD_URL" "$KEY"
+          elif [ "$MULTIPART_LEN" -gt 0 ]; then
+            upload_multipart "$LOCAL_PATH" "$KEY" "$MULTIPART_PARTS"
+          else
+            echo "❌ [$KEY] no upload URL and no multipart URLs in plan"
+            exit 1
+          fi
+        done
+
+        echo "🎉 All files uploaded"

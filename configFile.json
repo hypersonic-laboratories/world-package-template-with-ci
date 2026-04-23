@@ -1,0 +1,8 @@
+{
+  "game-config": {
+    "difficulty": "normal",
+    "maxPlayers": 4,
+    "enableSound": true,
+    "graphicsQuality": "high"
+  }
+}

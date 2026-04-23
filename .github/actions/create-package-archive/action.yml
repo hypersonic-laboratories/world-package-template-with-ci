@@ -8,6 +8,9 @@ outputs:
   archive-size:
     description: "Size of the archive in bytes"
     value: ${{ steps.get-size.outputs.archive-size }}
+  archive-xxh3:
+    description: "xxh3 (64-bit) hash of the archive as lowercase hex"
+    value: ${{ steps.hash-archive.outputs.archive-xxh3 }}
 
 runs:
   using: "composite"
@@ -70,3 +73,26 @@ runs:
 
         echo "archive-size=$ARCHIVE_SIZE" >> $GITHUB_OUTPUT
         echo "📦 Archive size: $ARCHIVE_SIZE bytes"
+
+    - name: Compute xxh3 hash
+      id: hash-archive
+      shell: bash
+      run: |
+        ARCHIVE_PATH="${{ steps.create-tar.outputs.archive-path }}"
+
+        if ! command -v xxhsum >/dev/null 2>&1; then
+          echo "ℹ️  xxhsum not found, installing xxhash..."
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xxhash
+        fi
+
+        # -H3 selects xxh3 64-bit. Output format: "<hash>  <file>"
+        ARCHIVE_XXH3=$(xxhsum -H3 "$ARCHIVE_PATH" | awk '{print $1}')
+
+        if [ -z "$ARCHIVE_XXH3" ]; then
+          echo "❌ Error: Failed to compute xxh3 hash"
+          exit 1
+        fi
+
+        echo "archive-xxh3=$ARCHIVE_XXH3" >> $GITHUB_OUTPUT
+        echo "🔑 Archive xxh3: $ARCHIVE_XXH3"

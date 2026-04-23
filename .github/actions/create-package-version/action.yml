@@ -1,5 +1,5 @@
 name: "Update Package Version"
-description: "Updates an existing package version via API using metadata.json"
+description: "Updates an existing package version via API using metadata.json and the files[] contract"
 
 inputs:
   api-url:
@@ -14,29 +14,26 @@ inputs:
   archive-size:
     description: "Size of the archive in bytes"
     required: true
+  archive-xxh3:
+    description: "xxh3 (64-bit) hash of the archive as lowercase hex"
+    required: true
 
 outputs:
   version-id:
-    description: "Created version ID"
-    value: ${{ steps.create-version.outputs.version-id }}
+    description: "Updated version ID"
+    value: ${{ steps.update-version.outputs.version-id }}
   package-id:
     description: "Package ID"
-    value: ${{ steps.create-version.outputs.package-id }}
-  client-upload-url:
-    description: "Pre-signed URL for client upload"
-    value: ${{ steps.create-version.outputs.client-upload-url }}
-  server-upload-url:
-    description: "Pre-signed URL for server upload"
-    value: ${{ steps.create-version.outputs.server-upload-url }}
-  metadata-upload-url:
-    description: "Pre-signed URL for metadata upload"
-    value: ${{ steps.create-version.outputs.metadata-upload-url }}
+    value: ${{ steps.update-version.outputs.package-id }}
+  upload-plan-path:
+    description: "Path to a JSON file containing the response files[] (upload URLs, multipart parts, sizes)"
+    value: ${{ steps.update-version.outputs.upload-plan-path }}
   config-path:
-    description: "Path to config.json file (if exists)"
-    value: ${{ steps.extract-config.outputs.config-path }}
+    description: "Path to configFile.json at repo root (if present and non-empty)"
+    value: ${{ steps.detect-config-file.outputs.config-path }}
   metadata-size:
-    description: "Size of config.json in bytes (if exists)"
-    value: ${{ steps.extract-config.outputs.metadata-size }}
+    description: "Size of configFile.json in bytes (if present)"
+    value: ${{ steps.detect-config-file.outputs.metadata-size }}
 
 runs:
   using: "composite"
@@ -50,10 +47,8 @@ runs:
           exit 1
         fi
 
-        # Extract package version ID, package ID, and dependency IDs from metadata.json
         VERSION_ID=$(jq -r '.id' metadata.json)
         PACKAGE_ID=$(jq -r '.package.id' metadata.json)
-        DEPENDENCY_IDS=$(jq -c '.dependencyIds // []' metadata.json)
 
         if [ "$VERSION_ID" = "null" ] || [ -z "$VERSION_ID" ]; then
           echo "❌ Error: id not found in metadata.json"
@@ -67,93 +62,85 @@ runs:
 
         echo "version-id=$VERSION_ID" >> $GITHUB_OUTPUT
         echo "package-id=$PACKAGE_ID" >> $GITHUB_OUTPUT
-        echo "dependency-ids=$DEPENDENCY_IDS" >> $GITHUB_OUTPUT
         echo "✅ Package Version ID: $VERSION_ID"
         echo "✅ Package ID: $PACKAGE_ID"
-        echo "✅ Dependencies: $DEPENDENCY_IDS"
 
-    - name: Extract config from metadata
-      id: extract-config
+    - name: Detect configFile.json
+      id: detect-config-file
       shell: bash
       run: |
-        # Check if config field exists in metadata.json
-        CONFIG=$(jq -r '.config // null' metadata.json)
+        # configFile.json at repo root is the "metadata" asset uploaded alongside content.
+        # It is optional; when missing (or empty) we simply omit the metadata file entry.
+        if [ -f "configFile.json" ] && [ -s "configFile.json" ]; then
+          CONFIG_FILE_SIZE=$(stat -c%s "configFile.json" 2>/dev/null || stat -f%z "configFile.json" 2>/dev/null)
 
-        if [ "$CONFIG" != "null" ]; then
-          echo "📝 Config field found in metadata.json"
-
-          # Extract config to config.json file
-          jq '.config' metadata.json > config.json
-
-          # Verify config.json was created
-          if [ ! -f "config.json" ]; then
-            echo "❌ Error: Failed to create config.json"
+          if [ -z "$CONFIG_FILE_SIZE" ] || [ "$CONFIG_FILE_SIZE" -eq 0 ]; then
+            echo "❌ Error: could not determine configFile.json size"
+            ls -lh configFile.json
             exit 1
           fi
 
-          # Get config.json size
-          CONFIG_SIZE=$(stat -c%s "config.json" 2>/dev/null || stat -f%z "config.json" 2>/dev/null)
-
-          if [ -z "$CONFIG_SIZE" ] || [ "$CONFIG_SIZE" -eq 0 ]; then
-            echo "❌ Error: config.json size is zero or could not be determined"
-            ls -lh config.json
-            exit 1
-          fi
-
-          echo "config-path=config.json" >> $GITHUB_OUTPUT
-          echo "metadata-size=$CONFIG_SIZE" >> $GITHUB_OUTPUT
-          echo "has-config=true" >> $GITHUB_OUTPUT
-          echo "✅ Config extracted to config.json ($CONFIG_SIZE bytes)"
+          echo "config-path=configFile.json" >> $GITHUB_OUTPUT
+          echo "metadata-size=$CONFIG_FILE_SIZE" >> $GITHUB_OUTPUT
+          echo "has-config-file=true" >> $GITHUB_OUTPUT
+          echo "✅ configFile.json detected ($CONFIG_FILE_SIZE bytes) — will upload as metadata"
         else
-          echo "ℹ️  No config field in metadata.json"
+          echo "ℹ️  No configFile.json at repo root — skipping metadata file entry"
           echo "config-path=" >> $GITHUB_OUTPUT
           echo "metadata-size=0" >> $GITHUB_OUTPUT
-          echo "has-config=false" >> $GITHUB_OUTPUT
+          echo "has-config-file=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Update package version
-      id: create-version
+      id: update-version
       shell: bash
       env:
         API_URL: ${{ inputs.api-url }}
         API_TOKEN: ${{ inputs.api-token }}
         VERSION_ID: ${{ steps.read-metadata.outputs.version-id }}
         PACKAGE_ID: ${{ steps.read-metadata.outputs.package-id }}
-        DEPENDENCY_IDS: ${{ steps.read-metadata.outputs.dependency-ids }}
         ARCHIVE_SIZE: ${{ inputs.archive-size }}
-        METADATA_SIZE: ${{ steps.extract-config.outputs.metadata-size }}
+        ARCHIVE_XXH3: ${{ inputs.archive-xxh3 }}
+        METADATA_SIZE: ${{ steps.detect-config-file.outputs.metadata-size }}
+        HAS_CONFIG_FILE: ${{ steps.detect-config-file.outputs.has-config-file }}
       run: |
-        # Construct the payload with config and metadataSize if config exists
-        if [ "$METADATA_SIZE" -gt 0 ] && [ -f "config.json" ]; then
-          # Read config object from metadata.json
-          CONFIG_OBJECT=$(jq -c '.config' metadata.json)
-
-          PAYLOAD=$(jq -n \
-            --argjson clientSize "$ARCHIVE_SIZE" \
-            --argjson serverSize "$ARCHIVE_SIZE" \
+        # files[] always contains a "content" entry with xxh3. A "metadata" entry is
+        # appended only when configFile.json exists at the repo root.
+        if [ "$HAS_CONFIG_FILE" = "true" ]; then
+          FILES_JSON=$(jq -n \
+            --argjson contentSize "$ARCHIVE_SIZE" \
+            --arg xxh3 "$ARCHIVE_XXH3" \
             --argjson metadataSize "$METADATA_SIZE" \
-            --argjson config "$CONFIG_OBJECT" \
-            '{
-              clientSize: $clientSize,
-              serverSize: $serverSize,
-              metadataSize: $metadataSize,
-              config: $config
-            }')
+            '[
+              {key: "content",  size: $contentSize,  metadata: {xxh3: $xxh3}},
+              {key: "metadata", size: $metadataSize, metadata: {}}
+            ]')
         else
+          FILES_JSON=$(jq -n \
+            --argjson contentSize "$ARCHIVE_SIZE" \
+            --arg xxh3 "$ARCHIVE_XXH3" \
+            '[
+              {key: "content", size: $contentSize, metadata: {xxh3: $xxh3}}
+            ]')
+        fi
+
+        # The PATCH body's `config` field (the version's stored config object) is
+        # independent of the metadata asset file — we still read it from metadata.json
+        # when present, for backward compatibility.
+        if [ "$(jq -r '.config // null' metadata.json)" != "null" ]; then
+          CONFIG_OBJECT=$(jq -c '.config' metadata.json)
           PAYLOAD=$(jq -n \
-            --argjson clientSize "$ARCHIVE_SIZE" \
-            --argjson serverSize "$ARCHIVE_SIZE" \
-            '{
-              clientSize: $clientSize,
-              serverSize: $serverSize
-            }')
+            --argjson files "$FILES_JSON" \
+            --argjson config "$CONFIG_OBJECT" \
+            '{files: $files, config: $config}')
+        else
+          PAYLOAD=$(jq -n --argjson files "$FILES_JSON" '{files: $files}')
         fi
 
         echo "📤 Updating package version..."
         echo "Version ID: $VERSION_ID"
         echo "Payload: $PAYLOAD"
 
-        # Make the API request
         RESPONSE=$(curl -s -w "\n%{http_code}" \
           -X PATCH \
           -H "Content-Type: application/json" \
@@ -161,7 +148,6 @@ runs:
           -d "$PAYLOAD" \
           "$API_URL/api/v1/package-versions/$VERSION_ID")
 
-        # Extract HTTP status code and body
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
         BODY=$(echo "$RESPONSE" | sed '$d')
 
@@ -173,25 +159,27 @@ runs:
           exit 1
         fi
 
-        # Parse response
         UPDATED_VERSION_ID=$(echo "$BODY" | jq -r '.item.id')
-        CLIENT_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.clientUploadUrl')
-        SERVER_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.serverUploadUrl')
-        METADATA_UPLOAD_URL=$(echo "$BODY" | jq -r '.item.metadataUploadUrl // ""')
-
         if [ "$UPDATED_VERSION_ID" = "null" ] || [ -z "$UPDATED_VERSION_ID" ]; then
           echo "❌ Error: Failed to parse version ID from response"
           echo "Response: $BODY"
           exit 1
         fi
 
+        # Persist the files[] response (upload URLs / multipart parts) for the upload step.
+        UPLOAD_PLAN_PATH="upload-plan.json"
+        echo "$BODY" | jq '.item.files' > "$UPLOAD_PLAN_PATH"
+
+        if [ ! -s "$UPLOAD_PLAN_PATH" ] || [ "$(jq 'length' "$UPLOAD_PLAN_PATH")" = "0" ]; then
+          echo "❌ Error: Response did not include a files[] array"
+          echo "Response: $BODY"
+          exit 1
+        fi
+
         echo "version-id=$UPDATED_VERSION_ID" >> $GITHUB_OUTPUT
         echo "package-id=$PACKAGE_ID" >> $GITHUB_OUTPUT
-        echo "client-upload-url=$CLIENT_UPLOAD_URL" >> $GITHUB_OUTPUT
-        echo "server-upload-url=$SERVER_UPLOAD_URL" >> $GITHUB_OUTPUT
-        echo "metadata-upload-url=$METADATA_UPLOAD_URL" >> $GITHUB_OUTPUT
+        echo "upload-plan-path=$UPLOAD_PLAN_PATH" >> $GITHUB_OUTPUT
 
         echo "✅ Package version updated: $UPDATED_VERSION_ID"
-        if [ -n "$METADATA_UPLOAD_URL" ]; then
-          echo "✅ Metadata upload URL received"
-        fi
+        echo "✅ Upload plan written to $UPLOAD_PLAN_PATH"
+        jq -r '.[] | "   • \(.key) (\(.size) bytes) — \(if .uploadUrl then "single upload" else "multipart (\(.uploadMultipartUrls | length) parts)" end)"' "$UPLOAD_PLAN_PATH"
